@@ -142,30 +142,30 @@ class MusicBot:
         self.bot.on_message(command("skip"))(self.skip_song)
         self.bot.on_message(command("stop"))(self.stop_vc)
 
-    async def run(self):
+    def run(self):
         self.ensure_downloads_dir()
         try:
-            await self.userbot.start()
-            await self.bot.start()
-            await self.pytgcalls.start()
+            self.userbot.start()
+            self.bot.start()
+            self.pytgcalls.start()
             print(">>> MUSIC BOT STARTED")
-            await idle()
+            idle()
         except Exception as e:
             print(f"Error during bot execution: {e}")
         finally:
-            await self.cleanup()
+            self.cleanup()
 
-    async def cleanup(self):
+    def cleanup(self):
         try:
-            await self.pytgcalls.stop()
+            self.pytgcalls.stop()
         except Exception as e:
             print(f"Error stopping pytgcalls: {e}")
         try:
-            await self.bot.stop()
+            self.bot.stop()
         except Exception as e:
             print(f"Error stopping bot: {e}")
         try:
-            await self.userbot.stop()
+            self.userbot.stop()
         except Exception as e:
             print(f"Error stopping userbot: {e}")
         print(">>> MUSIC BOT STOPPED")
