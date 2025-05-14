@@ -1,4 +1,4 @@
-from pyrogram import Client
+from pyrogram import Client, idle
 from pyrogram.filters import command
 from pytgcalls import PyTgCalls
 from pytgcalls.types import MediaStream as AudioPiped
