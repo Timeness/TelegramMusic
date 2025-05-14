@@ -2,10 +2,12 @@ from pyrogram import Client, idle
 from pyrogram.filters import command
 from pytgcalls import PyTgCalls
 from pytgcalls.types import MediaStream as AudioPiped
-import asyncio
 import os
+
+# Assuming config.py is correctly set up
 from config import API_ID, API_HASH, BOT_TOKEN, SESSION_NAME
 
+# Initialize clients
 userbot = Client("userbot_py", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_NAME)
 bot = Client("music_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 pytgcalls = PyTgCalls(userbot)
@@ -110,21 +112,30 @@ async def stop_vc(client, message):
     except Exception as e:
         await message.reply(f"Error: {str(e)}")
 
-if __name__ == "__main__":
-    if not os.path.exists("downloads"):
-        os.makedirs("downloads")
+# Create downloads directory
+if not os.path.exists("downloads"):
+    os.makedirs("downloads")
+
+# Start the bot
+try:
+    userbot.start()
+    bot.start()
+    pytgcalls.start()
+    print(">>> MUSIC BOT STARTED")
+    idle()  # Keep the bot running
+except Exception as e:
+    print(f"Error during bot execution: {e}")
+finally:
     try:
-        # Start clients asynchronously
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(userbot.start())
-        loop.run_until_complete(bot.start())
-        loop.run_until_complete(pytgcalls.start())
-        print(">>> MUSIC BOT STARTED")
-        loop.run_until_complete(idle())
-    except KeyboardInterrupt:
-        print(">>> Stopping Music Bot...")
-    finally:
-        # Ensure clean shutdown
-        loop.run_until_complete(bot.stop())
-        loop.run_until_complete(userbot.stop())
-        print(">>> MUSIC BOT STOPPED")
+        pytgcalls.stop()
+    except Exception as e:
+        print(f"Error stopping pytgcalls: {e}")
+    try:
+        bot.stop()
+    except Exception as e:
+        print(f"Error stopping bot: {e}")
+    try:
+        userbot.stop()
+    except Exception as e:
+        print(f"Error stopping userbot: {e}")
+    print(">>> MUSIC BOT STOPPED")
