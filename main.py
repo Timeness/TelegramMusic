@@ -81,30 +81,23 @@ async def play_song(client, message):
         response.raise_for_status()  # Raise exception for bad status
         data = response.json()
 
-        # Check if results exist
-        if not data.get("data") or len(data["data"]) == 0:
+        # Check status and results
+        if data.get("status") != "SUCCESS" or not data.get("data", {}).get("results") or len(data["data"]["results"]) == 0:
             await message.reply("No results found for your query!")
             return
 
         # Get first result
-        song = data["data"][0]
-        title = song.get("title", "Unknown Title")
+        song = data["data"]["results"][0]
+        title = song.get("name", "Unknown Title")
         download_urls = song.get("downloadUrl", [])
 
-        # Find the best quality (prefer 320kbps, fallback to 128kbps)
-        download_url = None
-        for url_info in download_urls:
-            if url_info.get("quality") == "320kbps":
-                download_url = url_info.get("link")
-                break
-        if not download_url:
-            for url_info in download_urls:
-                if url_info.get("quality") == "128kbps":
-                    download_url = url_info.get("link")
-                    break
-
-        if not download_url:
+        # Use the last download URL (highest quality, as per JavaScript)
+        if not download_urls:
             await message.reply("No downloadable URL found for this song!")
+            return
+        download_url = download_urls[-1].get("link")
+        if not download_url:
+            await message.reply("Invalid download URL for this song!")
             return
 
         # Download the song
@@ -120,6 +113,12 @@ async def play_song(client, message):
             await play_next()
     except requests.RequestException as e:
         await message.reply(f"Error fetching song from JioSaavn: {str(e)}. Try a different song.")
+        return
+    except KeyError as e:
+        await message.reply(f"Error processing API response: Missing field {str(e)}. Try a different song.")
+        return
+    except IndexError as e:
+        await message.reply(f"Error accessing results: {str(e)}. Try a different song.")
         return
     except Exception as e:
         await message.reply(f"Unexpected error: {str(e)}. Try a different song.")
