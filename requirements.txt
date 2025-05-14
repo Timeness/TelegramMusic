@@ -1,0 +1,5 @@
+pyrofork
+pytgcalls
+yt-dlp
+ffmpeg-python
+tgcrypto
