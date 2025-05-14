@@ -64,7 +64,7 @@ async def play_song(client, message):
         try:
             await pytgcalls.join_group_call(
                 CHAT_ID,
-                AudioPiped(queue[0], stream_type=StreamType().pulse_stream)
+                AudioPiped(queue[0], stream_type=StreamType().local_stream)
             )
             await message.reply("Joined voice chat and started playback!")
         except Exception as e:
@@ -79,7 +79,7 @@ async def play_next():
     try:
         await pytgcalls.change_stream(
             CHAT_ID,
-            AudioPiped(current_track, stream_type=StreamType().pulse_stream)
+            AudioPiped(current_track, stream_type=StreamType().local_stream)
         )
         await bot.send_message(CHAT_ID, f"Now playing: {os.path.basename(current_track)}")
     except Exception as e:
