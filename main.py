@@ -28,7 +28,7 @@ async def main():
 async def join_vc(client, message):
     try:
         await pytgcalls.join_group_call(
-            CHAT_ID,
+            message.chat.id,
             InputAudioStream("input.raw"),  # Placeholder; will be updated in play
             stream_type=StreamType().local_stream
         )
