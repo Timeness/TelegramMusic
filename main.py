@@ -16,7 +16,7 @@ pytgcalls = PyTgCalls(userbot)
 
 queue = []
 current_track = None
-CHAT_ID = None  # Store CHAT_ID globally
+#CHAT_ID = None  # Store CHAT_ID globally
 
 async def is_in_vc(chat_id):
     try:
@@ -35,7 +35,7 @@ async def ping_command(client, message):
 
 @bot.on_message(command("join"))
 async def join_vc(client, message):
-    global current_track, CHAT_ID
+    global current_track
     CHAT_ID = message.chat.id
     save_mp3_path = os.path.join(os.getcwd(), "Maybe.mp3")  # Path to save.mp3 in root directory
 
@@ -67,7 +67,7 @@ async def join_vc(client, message):
 
 @bot.on_message(command("play"))
 async def play_song(client, message):
-    global current_track, CHAT_ID
+    global current_track
     CHAT_ID = message.chat.id
     query = " ".join(message.command[1:]) or (message.reply_to_message.text if message.reply_to_message else None)
     if not query:
@@ -152,7 +152,6 @@ async def play_next():
 
 @bot.on_message(command("skip"))
 async def skip_song(client, message):
-    global CHAT_ID
     CHAT_ID = message.chat.id
     if not current_track:
         await message.reply("No song is playing!")
@@ -162,7 +161,7 @@ async def skip_song(client, message):
 
 @bot.on_message(command("stop"))
 async def stop_vc(client, message):
-    global current_track, CHAT_ID
+    global current_track
     CHAT_ID = message.chat.id
     try:
         await pytgcalls.leave_call(CHAT_ID)
