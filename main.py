@@ -49,6 +49,9 @@ async def play_song(client, message):
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
             }],
+            'default_search': 'ytsearch',  # Enable YouTube search for non-URL queries
+            'noplaylist': True,  # Download only the first video
+            'quiet': True,  # Suppress verbose output
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(query, download=True)
@@ -58,7 +61,14 @@ async def play_song(client, message):
             if not current_track:
                 await play_next()
     except yt_dlp.utils.DownloadError as e:
-        await message.reply(f"Error downloading song: {str(e)}")
+        if "Sign in to confirm you’re not a bot" in str(e):
+            await message.reply(
+                "YouTube requires authentication. Please provide cookies to download this song. "
+                "See https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp for instructions. "
+                "Alternatively, try a different song or URL."
+            )
+        else:
+            await message.reply(f"Error downloading song: {str(e)}")
         return
     except Exception as e:
         await message.reply(f"Unexpected error: {str(e)}")
