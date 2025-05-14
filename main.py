@@ -1,5 +1,5 @@
-from pyrofork import Client, idle
-from pyrofork.filters import command, user
+from pyrogram import Client, idle
+from pyrogram.filters import command, user
 from pytgcalls import PyTgCalls, StreamType
 from pytgcalls.types.input_stream import AudioPiped
 import asyncio
