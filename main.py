@@ -1,5 +1,5 @@
 from pyrogram import Client, idle
-from pyrogram.filters import command, user
+from pyrogram.filters import command
 from pytgcalls import PyTgCalls
 from pytgcalls.types import MediaStream as AudioPiped
 import asyncio
@@ -12,27 +12,26 @@ pytgcalls = PyTgCalls(userbot)
 
 queue = []
 current_track = None
+CHAT_ID = None  # Store CHAT_ID globally
 
-async def main():
-    await userbot.start()
-    await bot.start()
-    await pytgcalls.start()
-    print(">>> MUSIC BOT STARTED")
-    await idle()
-    await userbot.stop()
-    await bot.stop()
-    print(">>> MUSIC BOT STOPPED")
-
-async def is_in_vc(CHAT_ID):
+async def is_in_vc(chat_id):
     try:
-        call = await pytgcalls.get_group_call(CHAT_ID)
+        call = await pytgcalls.get_group_call(chat_id)
         return call is not None and call.is_running
     except Exception:
         return False
 
+@bot.on_message(command("start"))
+async def start_command(client, message):
+    await message.reply("Music Bot started! Use /play to play a song, /skip to skip, /stop to stop, or /ping to check status.")
+
+@bot.on_message(command("ping"))
+async def ping_command(client, message):
+    await message.reply("Pong! Bot is alive.")
+
 @bot.on_message(command("play"))
 async def play_song(client, message):
-    global current_track
+    global current_track, CHAT_ID
     CHAT_ID = message.chat.id
     query = " ".join(message.command[1:]) or (message.reply_to_message.text if message.reply_to_message else None)
     if not query:
@@ -56,8 +55,11 @@ async def play_song(client, message):
             await message.reply(f"Added to queue: {info['title']}")
             if not current_track:
                 await play_next()
-    except Exception as e:
+    except yt_dlp.utils.DownloadError as e:
         await message.reply(f"Error downloading song: {str(e)}")
+        return
+    except Exception as e:
+        await message.reply(f"Unexpected error: {str(e)}")
         return
 
     if not await is_in_vc(CHAT_ID):
@@ -71,7 +73,7 @@ async def play_song(client, message):
             await message.reply(f"Error joining VC: {str(e)}")
 
 async def play_next():
-    global current_track
+    global current_track, CHAT_ID
     if not queue:
         current_track = None
         return
@@ -88,6 +90,8 @@ async def play_next():
 
 @bot.on_message(command("skip"))
 async def skip_song(client, message):
+    global CHAT_ID
+    CHAT_ID = message.chat.id
     if not current_track:
         await message.reply("No song is playing!")
         return
@@ -96,10 +100,11 @@ async def skip_song(client, message):
 
 @bot.on_message(command("stop"))
 async def stop_vc(client, message):
+    global current_track, CHAT_ID
+    CHAT_ID = message.chat.id
     try:
-        await pytgcalls.leave_group_call(message.chat.id)
+        await pytgcalls.leave_group_call(CHAT_ID)
         queue.clear()
-        global current_track
         current_track = None
         await message.reply("Stopped and left voice chat!")
     except Exception as e:
@@ -108,4 +113,18 @@ async def stop_vc(client, message):
 if __name__ == "__main__":
     if not os.path.exists("downloads"):
         os.makedirs("downloads")
-    asyncio.run(main())
+    try:
+        # Start clients asynchronously
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(userbot.start())
+        loop.run_until_complete(bot.start())
+        loop.run_until_complete(pytgcalls.start())
+        print(">>> MUSIC BOT STARTED")
+        loop.run_until_complete(idle())
+    except KeyboardInterrupt:
+        print(">>> Stopping Music Bot...")
+    finally:
+        # Ensure clean shutdown
+        loop.run_until_complete(bot.stop())
+        loop.run_until_complete(userbot.stop())
+        print(">>> MUSIC BOT STOPPED")
