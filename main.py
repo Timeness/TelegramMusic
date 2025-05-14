@@ -1,6 +1,6 @@
 from pyrogram import Client, idle
 from pyrogram.filters import command, user
-from pytgcalls import PyTgCalls, StreamType
+from pytgcalls import PyTgCalls
 from pytgcalls.types.input_stream import AudioPiped
 import asyncio
 import os
@@ -60,11 +60,11 @@ async def play_song(client, message):
         await message.reply(f"Error downloading song: {str(e)}")
         return
 
-    if not await is_in_vc(message.chat.id):
+    if not await is_in_vc(CHAT_ID):
         try:
             await pytgcalls.join_group_call(
                 CHAT_ID,
-                AudioPiped(queue[0], stream_type=StreamType().local_stream)
+                AudioPiped(queue[0])
             )
             await message.reply("Joined voice chat and started playback!")
         except Exception as e:
@@ -79,7 +79,7 @@ async def play_next():
     try:
         await pytgcalls.change_stream(
             CHAT_ID,
-            AudioPiped(current_track, stream_type=StreamType().local_stream)
+            AudioPiped(current_track)
         )
         await bot.send_message(CHAT_ID, f"Now playing: {os.path.basename(current_track)}")
     except Exception as e:
