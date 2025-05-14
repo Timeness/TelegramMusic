@@ -1,7 +1,7 @@
 from pyrogram import Client, idle
 from pyrogram.filters import command, user
 from pytgcalls import PyTgCalls
-from pytgcalls.types.input_stream import AudioPiped
+from pytgcalls.types import MediaStream as AudioPiped
 import asyncio
 import os
 from config import API_ID, API_HASH, BOT_TOKEN, SESSION_NAME
