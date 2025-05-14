@@ -20,7 +20,7 @@ CHAT_ID = None  # Store CHAT_ID globally
 
 async def is_in_vc(chat_id):
     try:
-        call = await pytgcalls.get_group_call(chat_id)
+        call = await pytgcalls.get_state(chat_id)
         return call is not None and call.is_running
     except Exception:
         return False
@@ -56,7 +56,7 @@ async def join_vc(client, message):
 
         # Join VC and play save.mp3
         queue.append(save_mp3_path)
-        await pytgcalls.join_group_call(
+        await pytgcalls.play(
             CHAT_ID,
             AudioPiped(save_mp3_path)
         )
@@ -126,7 +126,7 @@ async def play_song(client, message):
 
     if not await is_in_vc(CHAT_ID):
         try:
-            await pytgcalls.join_group_call(
+            await pytgcalls.play(
                 CHAT_ID,
                 AudioPiped(queue[0])
             )
@@ -141,7 +141,7 @@ async def play_next():
         return
     current_track = queue.pop(0)
     try:
-        await pytgcalls.change_stream(
+        await pytgcalls.play(
             CHAT_ID,
             AudioPiped(current_track)
         )
@@ -165,7 +165,7 @@ async def stop_vc(client, message):
     global current_track, CHAT_ID
     CHAT_ID = message.chat.id
     try:
-        await pytgcalls.leave_group_call(CHAT_ID)
+        await pytgcalls.leave_call(CHAT_ID)
         queue.clear()
         current_track = None
         await message.reply("Stopped and left voice chat!")
