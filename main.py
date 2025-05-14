@@ -27,11 +27,43 @@ async def is_in_vc(chat_id):
 
 @bot.on_message(command("start"))
 async def start_command(client, message):
-    await message.reply("Music Bot started! Use /play to play a song, /skip to skip, /stop to stop, or /ping to check status.")
+    await message.reply("Music Bot started! Use /play to play a song, /join to join VC and play save.mp3, /skip to skip, /stop to stop, or /ping to check status.")
 
 @bot.on_message(command("ping"))
 async def ping_command(client, message):
     await message.reply("Pong! Bot is alive.")
+
+@bot.on_message(command("join"))
+async def join_vc(client, message):
+    global current_track, CHAT_ID
+    CHAT_ID = message.chat.id
+    save_mp3_path = os.path.join(os.getcwd(), "Maybe.mp3")  # Path to save.mp3 in root directory
+
+    # Check if save.mp3 exists
+    if not os.path.exists(save_mp3_path):
+        await message.reply("Error: Maybe.mp3 not found in the root directory!")
+        return
+
+    try:
+        # Check if already in VC
+        if await is_in_vc(CHAT_ID):
+            # Add save.mp3 to queue
+            queue.append(save_mp3_path)
+            await message.reply("Added Maybe.mp3 to queue!")
+            if not current_track:
+                await play_next()
+            return
+
+        # Join VC and play save.mp3
+        queue.append(save_mp3_path)
+        await pytgcalls.join_group_call(
+            CHAT_ID,
+            AudioPiped(save_mp3_path)
+        )
+        await message.reply("Joined voice chat and started playing save.mp3!")
+        current_track = save_mp3_path
+    except Exception as e:
+        await message.reply(f"Error joining VC or playing save.mp3: {str(e)}")
 
 @bot.on_message(command("play"))
 async def play_song(client, message):
