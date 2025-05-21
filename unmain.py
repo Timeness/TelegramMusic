@@ -1,7 +1,7 @@
 from pyrogram import Client, filters, idle
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pytgcalls import PyTgCalls
-from pytgcalls.types import MediaStream, Call, StreamEnded as StreamAudioEnded
+from pytgcalls.types import MediaStream as AudioPiped, Call, StreamEnded as StreamAudioEnded
 import os
 import requests
 import urllib.parse
