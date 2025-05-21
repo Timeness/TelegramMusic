@@ -226,7 +226,8 @@ class MusicBot:
         local_vars = {}
         exec(
             f"async def __aexec(client, message):\n" +
-            "\n".join(f"    {line}" for line in code.split("\n")),
+            "\n".join(f"    {line}" for line in code.split("\n")) +
+            "\n    return locals().get('__ret__')",
             globals(),
             local_vars
         )
@@ -242,11 +243,22 @@ class MusicBot:
         sys.stdout = StringIO()
         sys.stderr = StringIO()
         try:
-            await self.aexec(code, client, message)
+            result = await self.aexec(
+                "\n".join(
+                    f"    __ret__ = {line}" if not line.strip().startswith(("print", "await"))
+                    else f"    {line}"
+                    for line in code.split("\n")
+                ),
+                client,
+                message
+            )
+            output = sys.stdout.getvalue() or sys.stderr.getvalue()
+            if result is not None:
+                output = str(result) if not output else f"{output}\nResult: {result}"
+            elif not output:
+                output = "✅ Success"
         except Exception:
             output = traceback.format_exc()
-        else:
-            output = sys.stdout.getvalue() or sys.stderr.getvalue() or "✅ Success"
         sys.stdout = stdout
         sys.stderr = stderr
         if len(output) > 4000:
