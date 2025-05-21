@@ -117,7 +117,7 @@ class MusicBot:
             return
         self.queue.append(track)
         try:
-            await self.pytgcalls.play(self.chat_id, MediaStream(save_mp3_path, MediaStream.Flags.AUDIO))
+            await self.pytgcalls.join_group_call(self.chat_id, MediaStream(save_mp3_path, MediaStream.Flags.AUDIO))
             await message.reply("🎙️ Joined voice chat and started playing Maybe.mp3!")
             self.current_track = track
         except Exception:
@@ -141,7 +141,7 @@ class MusicBot:
             await message.reply(caption)
         if not self.current_track and not await self.is_in_vc():
             try:
-                await self.pytgcalls.play(self.chat_id, MediaStream(self.queue[0].path, MediaStream.Flags.AUDIO))
+                await self.pytgcalls.join_group_call(self.chat_id, MediaStream(self.queue[0].path, MediaStream.Flags.AUDIO))
                 caption = f"🎙️ Joined voice chat and started playback!\n🎵 Now playing: {self.queue[0].title}\n👤 Artist: {self.queue[0].artist}\n📀 Album: {self.queue[0].album}\n⏳ Duration: {self.queue[0].duration}"
                 if self.queue[0].thumbnail:
                     await self.bot.send_photo(self.chat_id, self.queue[0].thumbnail, caption=caption)
