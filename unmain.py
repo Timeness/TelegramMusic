@@ -226,8 +226,8 @@ class MusicBot:
         local_vars = {}
         exec(
             f"async def __aexec(client, message):\n" +
-            "\n".join(f"    {line}" for line in code.split("\n")) +
-            "\n    return locals().get('__ret__')",
+            "".join(f"    {line}\n" for line in code.split("\n")) +
+            "    return locals().get('__ret__')",
             globals(),
             local_vars
         )
@@ -245,7 +245,7 @@ class MusicBot:
         try:
             result = await self.aexec(
                 "\n".join(
-                    f"    __ret__ = {line}" if not line.strip().startswith(("print", "await"))
+                    f"    __ret__ = {line}" if not line.strip().startswith(("print", "await", "return"))
                     else f"    {line}"
                     for line in code.split("\n")
                 ),
