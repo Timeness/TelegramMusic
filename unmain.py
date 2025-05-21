@@ -1,8 +1,7 @@
 from pyrogram import Client, filters, idle
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pytgcalls import PyTgCalls
-from pytgcalls.types import MediaStream as AudioPiped
-from pytgcalls.types import Update
+from pytgcalls.types import MediaStream, Call
 import os
 import requests
 import urllib.parse
@@ -44,7 +43,7 @@ class MusicBot:
 
     async def is_in_vc(self) -> bool:
         try:
-            call = await self.pytgcalls.get_active_call(self.chat_id)
+            call = self.pytgcalls.calls.get(self.chat_id)
             return call is not None
         except Exception:
             return False
@@ -83,7 +82,7 @@ class MusicBot:
             return
         self.current_track = self.queue.pop(0)
         try:
-            await self.pytgcalls.play(self.chat_id, AudioPiped(self.current_track.path))
+            await self.pytgcalls.play(self.chat_id, MediaStream(self.current_track.path, MediaStream.Flags.AUDIO))
             caption = f"🎵 Now playing: {self.current_track.title}\n👤 Artist: {self.current_track.artist}\n📀 Album: {self.current_track.album}\n⏳ Duration: {self.current_track.duration}"
             if self.current_track.thumbnail:
                 await self.bot.send_photo(self.chat_id, self.current_track.thumbnail, caption=caption)
@@ -93,15 +92,15 @@ class MusicBot:
             await self.bot.send_message(self.chat_id, "❌ Error playing track")
             await self.play_next()
 
-    async def on_stream_end(self, client: Client, update: Update):
-        if isinstance(update, Update.StreamAudioEnded):
+    async def on_stream_end(self, client: Client, update: Call):
+        if isinstance(update, Call):
             await self.play_next()
 
     async def start_command(self, _, message):
-        await message.reply("🎉 Music Bot started! Use /play, /join, /skip, /stop, /queue, /ping, /e, or /sh.")
+        await message.reply("🎉 Music Bot started! Use /play, /join, /skip, /pause, /resume, /stop, /queue, /ping, /e, or /sh.")
 
     async def ping_command(self, _, message):
-        await message.reply("🏓 Pong! Bot is online.")
+        await message.reply(f"🏓 Pong! Bot is online. Latency: {self.pytgcalls.ping()}ms")
 
     async def join_vc(self, _, message):
         self.chat_id = message.chat.id
@@ -118,7 +117,7 @@ class MusicBot:
             return
         self.queue.append(track)
         try:
-            await self.pytgcalls.join_group_call(self.chat_id, AudioPiped(save_mp3_path))
+            await self.pytgcalls.play(self.chat_id, MediaStream(save_mp3_path, MediaStream.Flags.AUDIO))
             await message.reply("🎙️ Joined voice chat and started playing Maybe.mp3!")
             self.current_track = track
         except Exception:
@@ -142,7 +141,7 @@ class MusicBot:
             await message.reply(caption)
         if not self.current_track and not await self.is_in_vc():
             try:
-                await self.pytgcalls.join_group_call(self.chat_id, AudioPiped(self.queue[0].path))
+                await self.pytgcalls.play(self.chat_id, MediaStream(self.queue[0].path, MediaStream.Flags.AUDIO))
                 caption = f"🎙️ Joined voice chat and started playback!\n🎵 Now playing: {self.queue[0].title}\n👤 Artist: {self.queue[0].artist}\n📀 Album: {self.queue[0].album}\n⏳ Duration: {self.queue[0].duration}"
                 if self.queue[0].thumbnail:
                     await self.bot.send_photo(self.chat_id, self.queue[0].thumbnail, caption=caption)
@@ -160,11 +159,37 @@ class MusicBot:
             await message.reply("❌ No song is playing or bot is not in voice chat!")
             return
         try:
-            await self.pytgcalls.change_stream(self.chat_id, None)
+            await self.pytgcalls.play(self.chat_id, None)
             await message.reply(f"⏭ Skipped: {self.current_track.title}")
             await self.play_next()
         except Exception:
             await message.reply("❌ Error skipping song")
+
+    async def pause_song(self, _, message):
+        self.chat_id = message.chat.id
+        if not self.current_track or not await self.is_in_vc():
+            await message.reply("❌ No song is playing or bot is not in voice chat!")
+            return
+        try:
+            await self.pytgcalls.pause(self.chat_id)
+            await message.reply(f"⏸ Paused: {self.current_track.title}")
+        except Exception:
+            await message.reply("❌ Error pausing song")
+
+    async def resume_song(self, _, message):
+        self.chat_id = message.chat.id
+        if not self.current_track or not await self.is_in_vc():
+            await message.reply("❌ No song is playing or bot is not in voice chat!")
+            return
+        try:
+            call = self.pytgcalls.calls.get(self.chat_id)
+            if call and call.capture == "PAUSED":
+                await self.pytgcalls.resume(self.chat_id)
+                await message.reply(f"▶ Resumed: {self.current_track.title}")
+            else:
+                await message.reply("❌ Song is not paused!")
+        except Exception:
+            await message.reply("❌ Error resuming song")
 
     async def queue_command(self, _, message):
         if not self.queue and not self.current_track:
@@ -180,7 +205,7 @@ class MusicBot:
     async def stop_vc(self, _, message):
         self.chat_id = message.chat.id
         try:
-            await self.pytgcalls.leave_group_call(self.chat_id)
+            await self.pytgcalls.leave_call(self.chat_id)
             self.queue.clear()
             self.current_track = None
             await message.reply("🛑 Stopped and left voice chat!")
@@ -281,6 +306,8 @@ class MusicBot:
         self.bot.on_message(filters.command("join"))(self.join_vc)
         self.bot.on_message(filters.command("play"))(self.play_song)
         self.bot.on_message(filters.command("skip"))(self.skip_song)
+        self.bot.on_message(filters.command("pause"))(self.pause_song)
+        self.bot.on_message(filters.command("resume"))(self.resume_song)
         self.bot.on_message(filters.command("queue"))(self.queue_command)
         self.bot.on_message(filters.command("stop"))(self.stop_vc)
         self.bot.on_message(filters.command("e") & filters.user(self.OWNER_ID))(self.eval_command)
