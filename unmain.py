@@ -312,7 +312,6 @@ class MusicBot:
         self.bot.on_message(filters.command("stop"))(self.stop_vc)
         self.bot.on_message(filters.command("e") & filters.user(self.OWNER_ID))(self.eval_command)
         self.bot.on_message(filters.command("sh") & filters.user(self.OWNER_ID))(self.shellrunner)
-        self.pytgcalls.on_stream_end()(self.on_stream_end)
 
     def run(self):
         self.ensure_downloads_dir()
