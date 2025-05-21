@@ -2,6 +2,7 @@ from pyrogram import Client, filters, idle
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pytgcalls import PyTgCalls
 from pytgcalls.types import MediaStream as AudioPiped
+from pytgcalls.types import Update
 import os
 import requests
 import urllib.parse
@@ -43,8 +44,8 @@ class MusicBot:
 
     async def is_in_vc(self) -> bool:
         try:
-            call = await self.pytgcalls.get_state(self.chat_id)
-            return call is not None and call.is_running
+            call = await self.pytgcalls.get_active_call(self.chat_id)
+            return call is not None
         except Exception:
             return False
 
@@ -78,99 +79,113 @@ class MusicBot:
     async def play_next(self):
         if not self.queue:
             self.current_track = None
-            await self.pytgcalls.stop(self.chat_id)
-            await self.bot.send_message(self.chat_id, "Queue is empty, playback stopped.")
+            await self.bot.send_message(self.chat_id, "🎶 Queue is empty, playback stopped.")
             return
         self.current_track = self.queue.pop(0)
         try:
             await self.pytgcalls.play(self.chat_id, AudioPiped(self.current_track.path))
-            caption = f"Now playing: {self.current_track.title}\nArtist: {self.current_track.artist}\nAlbum: {self.current_track.album}\nDuration: {self.current_track.duration}"
+            caption = f"🎵 Now playing: {self.current_track.title}\n👤 Artist: {self.current_track.artist}\n📀 Album: {self.current_track.album}\n⏳ Duration: {self.current_track.duration}"
             if self.current_track.thumbnail:
                 await self.bot.send_photo(self.chat_id, self.current_track.thumbnail, caption=caption)
             else:
                 await self.bot.send_message(self.chat_id, caption)
         except Exception:
-            await self.bot.send_message(self.chat_id, "Error playing track")
+            await self.bot.send_message(self.chat_id, "❌ Error playing track")
+            await self.play_next()
+
+    async def on_stream_end(self, client: Client, update: Update):
+        if isinstance(update, Update.StreamAudioEnded):
             await self.play_next()
 
     async def start_command(self, _, message):
-        await message.reply("Music Bot started! Use /play, /join, /skip, /stop, /ping, /e, or /sh.")
+        await message.reply("🎉 Music Bot started! Use /play, /join, /skip, /stop, /queue, /ping, /e, or /sh.")
 
     async def ping_command(self, _, message):
-        await message.reply("Pong! Bot is alive.")
+        await message.reply("🏓 Pong! Bot is online.")
 
     async def join_vc(self, _, message):
         self.chat_id = message.chat.id
         save_mp3_path = os.path.join(os.getcwd(), "Maybe.mp3")
         if not os.path.exists(save_mp3_path):
-            await message.reply("Error: Maybe.mp3 not found!")
+            await message.reply("❌ Error: Maybe.mp3 not found!")
             return
         track = Track(path=save_mp3_path, title="Maybe.mp3", artist="Unknown", album="Unknown", duration="Unknown")
         if await self.is_in_vc():
             self.queue.append(track)
-            await message.reply("Added Maybe.mp3 to queue!")
+            await message.reply("🎶 Added Maybe.mp3 to queue!")
             if not self.current_track:
                 await self.play_next()
             return
         self.queue.append(track)
         try:
-            await self.pytgcalls.play(self.chat_id, AudioPiped(save_mp3_path))
-            await message.reply("Joined voice chat and started playing Maybe.mp3!")
+            await self.pytgcalls.join_group_call(self.chat_id, AudioPiped(save_mp3_path))
+            await message.reply("🎙️ Joined voice chat and started playing Maybe.mp3!")
             self.current_track = track
         except Exception:
-            await message.reply("Error joining VC or playing Maybe.mp3")
+            await message.reply("❌ Error joining VC or playing Maybe.mp3")
 
     async def play_song(self, _, message):
         self.chat_id = message.chat.id
         query = " ".join(message.command[1:]) or (message.reply_to_message.text if message.reply_to_message else None)
         if not query:
-            await message.reply("Please provide a song name!")
+            await message.reply("❓ Please provide a song name!")
             return
         track = await self.fetch_song(query)
         if not track:
-            await message.reply("No results found or error fetching song!")
+            await message.reply("❌ No results found or error fetching song!")
             return
         self.queue.append(track)
-        caption = f"Added to queue: {track.title}\nArtist: {track.artist}\nAlbum: {track.album}\nDuration: {track.duration}"
+        caption = f"✅ Added to queue: {track.title}\n👤 Artist: {track.artist}\n📀 Album: {track.album}\n⏳ Duration: {track.duration}"
         if track.thumbnail:
             await message.reply_photo(track.thumbnail, caption=caption)
         else:
             await message.reply(caption)
         if not self.current_track and not await self.is_in_vc():
             try:
-                await self.pytgcalls.play(self.chat_id, AudioPiped(self.queue[0].path))
-                caption = f"Joined voice chat and started playback!\nNow playing: {self.queue[0].title}\nArtist: {self.queue[0].artist}\nAlbum: {self.queue[0].album}\nDuration: {self.queue[0].duration}"
+                await self.pytgcalls.join_group_call(self.chat_id, AudioPiped(self.queue[0].path))
+                caption = f"🎙️ Joined voice chat and started playback!\n🎵 Now playing: {self.queue[0].title}\n👤 Artist: {self.queue[0].artist}\n📀 Album: {self.queue[0].album}\n⏳ Duration: {self.queue[0].duration}"
                 if self.queue[0].thumbnail:
                     await self.bot.send_photo(self.chat_id, self.queue[0].thumbnail, caption=caption)
                 else:
                     await self.bot.send_message(self.chat_id, caption)
                 self.current_track = self.queue.pop(0)
             except Exception:
-                await self.bot.send_message(self.chat_id, "Error joining VC")
+                await self.bot.send_message(self.chat_id, "❌ Error joining VC")
         elif self.current_track:
-            await message.reply(f"Added to queue, will play after: {self.current_track.title}")
+            await message.reply(f"⏳ Queued, will play after: {self.current_track.title}")
 
     async def skip_song(self, _, message):
         self.chat_id = message.chat.id
         if not self.current_track or not await self.is_in_vc():
-            await message.reply("No song is playing or bot is not in voice chat!")
+            await message.reply("❌ No song is playing or bot is not in voice chat!")
             return
         try:
-            await self.pytgcalls.stop(self.chat_id)
-            await message.reply(f"Skipped: {self.current_track.title}")
+            await self.pytgcalls.change_stream(self.chat_id, None)
+            await message.reply(f"⏭ Skipped: {self.current_track.title}")
             await self.play_next()
         except Exception:
-            await message.reply("Error skipping song")
+            await message.reply("❌ Error skipping song")
+
+    async def queue_command(self, _, message):
+        if not self.queue and not self.current_track:
+            await message.reply("🎶 Queue is empty!")
+            return
+        queue_text = "🎵 Current Queue:\n"
+        if self.current_track:
+            queue_text += f"▶ Now Playing: {self.current_track.title} (Artist: {self.current_track.artist})\n"
+        for i, track in enumerate(self.queue, 1):
+            queue_text += f"{i}. {track.title} (Artist: {track.artist})\n"
+        await message.reply(queue_text)
 
     async def stop_vc(self, _, message):
         self.chat_id = message.chat.id
         try:
-            await self.pytgcalls.leave_call(self.chat_id)
+            await self.pytgcalls.leave_group_call(self.chat_id)
             self.queue.clear()
             self.current_track = None
-            await message.reply("Stopped and left voice chat!")
+            await message.reply("🛑 Stopped and left voice chat!")
         except Exception:
-            await message.reply("Error stopping voice chat")
+            await message.reply("❌ Error stopping voice chat")
 
     async def edit_or_reply(self, msg: Message, **kwargs):
         func = msg.edit_text if msg.from_user.is_self else msg.reply
@@ -189,7 +204,7 @@ class MusicBot:
 
     async def eval_command(self, client: Client, message: Message):
         if len(message.command) < 2:
-            return await self.edit_or_reply(message, text="ᴘʟᴇᴀꜱᴇ ᴘʀᴏᴠɪᴅᴇ ᴍᴇ ᴄᴏᴅᴇ ᴛᴏ ᴇᴠᴀʟᴜᴀᴛᴇ ᴍʏ ᴍᴀꜱᴛᴇʀ")
+            return await self.edit_or_reply(message, text="🔍 Please provide code to evaluate, master!")
         code = message.text.split(" ", maxsplit=1)[1]
         t1 = time()
         stdout = sys.stdout
@@ -201,32 +216,32 @@ class MusicBot:
         except Exception:
             output = traceback.format_exc()
         else:
-            output = sys.stdout.getvalue() or sys.stderr.getvalue() or "ꜱᴜᴄᴄᴇꜱꜱ"
+            output = sys.stdout.getvalue() or sys.stderr.getvalue() or "✅ Success"
         sys.stdout = stdout
         sys.stderr = stderr
         if len(output) > 4000:
-            output = output[:4000] + "\n\n⚠️ ᴏᴜᴛᴘᴜᴛ ᴛʀᴜɴᴄᴀᴛᴇᴅ."
+            output = output[:4000] + "\n\n⚠️ Output truncated."
         reply_markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton(text="⏳", callback_data=f"runtime {round(time()-t1, 2)}s")]]
         )
         await message.reply_text(
-            f"<b>📤 ʀᴇꜱᴜʟᴛ:</b>\n<pre language='python'>{output}</pre>",
+            f"<b>📤 Result:</b>\n<pre language='python'>{output}</pre>",
             quote=True,
             reply_markup=reply_markup
         )
         try:
             await client.send_message(
                 self.LOG_CHAT_ID,
-                f"#ᴇᴠᴀʟ ʙʏ [{message.from_user.first_name}](tg://user?id={message.from_user.id}):\n\n"
-                f"<b>📥 ᴄᴏᴅᴇ:</b>\n<pre language='python'>{code}</pre>\n\n"
-                f"<b>📤 ᴏᴜᴛᴘᴜᴛ:</b>\n<pre language='python'>{output}</pre>",
+                f"#EVAL by [{message.from_user.first_name}](tg://user?id={message.from_user.id}):\n\n"
+                f"<b>📥 Code:</b>\n<pre language='python'>{code}</pre>\n\n"
+                f"<b>📤 Output:</b>\n<pre language='python'>{output}</pre>",
             )
         except Exception as e:
             print("Logging failed:", e)
 
     async def shellrunner(self, client: Client, message: Message):
         if len(message.command) < 2:
-            return await self.edit_or_reply(message, text="<b>Example:</b>\n/sh ɢɪᴛ ᴘᴜʟʟ")
+            return await self.edit_or_reply(message, text="<b>Example:</b>\n/sh git pull")
         text = message.text.split(None, 1)[1]
         output = ""
         if "\n" in text:
@@ -244,7 +259,7 @@ class MusicBot:
                     output += err.decode("utf-8")
             except Exception as e:
                 error_trace = traceback.format_exc()
-                return await self.edit_or_reply(message, text=f"<b>ᴇʀʀᴏʀ:</b>\n<pre>{error_trace}</pre>")
+                return await self.edit_or_reply(message, text=f"<b>❌ Error:</b>\n<pre>{error_trace}</pre>")
         if not output.strip():
             output = "No Output"
         if len(output) > 4096:
@@ -258,7 +273,7 @@ class MusicBot:
             )
             os.remove("output.txt")
         else:
-            await self.edit_or_reply(message, text=f"<b>ᴏᴜᴛᴘᴜᴛ:</b>\n<pre>{output}</pre>")
+            await self.edit_or_reply(message, text=f"<b>📤 Output:</b>\n<pre>{output}</pre>")
 
     def register_handlers(self):
         self.bot.on_message(filters.command("start"))(self.start_command)
@@ -266,9 +281,11 @@ class MusicBot:
         self.bot.on_message(filters.command("join"))(self.join_vc)
         self.bot.on_message(filters.command("play"))(self.play_song)
         self.bot.on_message(filters.command("skip"))(self.skip_song)
+        self.bot.on_message(filters.command("queue"))(self.queue_command)
         self.bot.on_message(filters.command("stop"))(self.stop_vc)
         self.bot.on_message(filters.command("e") & filters.user(self.OWNER_ID))(self.eval_command)
         self.bot.on_message(filters.command("sh") & filters.user(self.OWNER_ID))(self.shellrunner)
+        self.pytgcalls.on_stream_end()(self.on_stream_end)
 
     def run(self):
         self.ensure_downloads_dir()
