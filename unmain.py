@@ -1,7 +1,7 @@
 from pyrogram import Client, filters, idle
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pytgcalls import PyTgCalls
-from pytgcalls.types import MediaStream, Call
+from pytgcalls.types import MediaStream, Call, StreamAudioEnded
 import os
 import requests
 import urllib.parse
@@ -43,8 +43,7 @@ class MusicBot:
 
     async def is_in_vc(self) -> bool:
         try:
-            call = self.pytgcalls.calls.get(self.chat_id)
-            return call is not None
+            return self.chat_id in self.pytgcalls.calls
         except Exception:
             return False
 
@@ -52,7 +51,7 @@ class MusicBot:
     async def fetch_song(query: str) -> Optional[Track]:
         try:
             url = f"https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query={urllib.parse.quote(query)}"
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
             if data.get("status") != "SUCCESS" or not data.get("data", {}).get("results"):
@@ -66,13 +65,13 @@ class MusicBot:
             duration = song.get("duration", "Unknown")
             if not download_url:
                 return None
-            file_path = f"downloads/{title}.mp3"
+            file_path = f"downloads/{title.replace('/', '_')}.mp3"
             with open(file_path, "wb") as f:
-                audio_response = requests.get(download_url)
+                audio_response = requests.get(download_url, timeout=10)
                 audio_response.raise_for_status()
                 f.write(audio_response.content)
             return Track(path=file_path, title=title, thumbnail=thumbnail, artist=artist, album=album, duration=duration)
-        except (requests.RequestException, KeyError, IndexError):
+        except Exception:
             return None
 
     async def play_next(self):
@@ -88,19 +87,23 @@ class MusicBot:
                 await self.bot.send_photo(self.chat_id, self.current_track.thumbnail, caption=caption)
             else:
                 await self.bot.send_message(self.chat_id, caption)
-        except Exception:
-            await self.bot.send_message(self.chat_id, "❌ Error playing track")
+        except Exception as e:
+            await self.bot.send_message(self.chat_id, f"❌ Error playing track: {str(e)}")
             await self.play_next()
 
-    async def on_stream_end(self, client: Client, update: Call):
-        if isinstance(update, Call):
+    async def on_stream_end(self, client: Client, update: StreamAudioEnded):
+        if isinstance(update, StreamAudioEnded) and update.chat_id == self.chat_id:
             await self.play_next()
 
     async def start_command(self, _, message):
         await message.reply("🎉 Music Bot started! Use /play, /join, /skip, /pause, /resume, /stop, /queue, /ping, /e, or /sh.")
 
     async def ping_command(self, _, message):
-        await message.reply(f"🏓 Pong! Bot is online. Latency: {self.pytgcalls.ping()}ms")
+        try:
+            latency = self.pytgcalls.ping()
+            await message.reply(f"🏓 Pong! Bot is online. Latency: {latency}ms")
+        except Exception as e:
+            await message.reply(f"❌ Error checking ping: {str(e)}")
 
     async def join_vc(self, _, message):
         self.chat_id = message.chat.id
@@ -115,13 +118,12 @@ class MusicBot:
             if not self.current_track:
                 await self.play_next()
             return
-        self.queue.append(track)
         try:
-            await self.pytgcalls.join_group_call(self.chat_id, MediaStream(save_mp3_path, MediaStream.Flags.AUDIO))
+            await self.pytgcalls.play(self.chat_id, MediaStream(save_mp3_path, MediaStream.Flags.AUDIO))
             await message.reply("🎙️ Joined voice chat and started playing Maybe.mp3!")
             self.current_track = track
-        except Exception:
-            await message.reply("❌ Error joining VC or playing Maybe.mp3")
+        except Exception as e:
+            await message.reply(f"❌ Error joining voice chat: {str(e)}")
 
     async def play_song(self, _, message):
         self.chat_id = message.chat.id
@@ -135,21 +137,24 @@ class MusicBot:
             return
         self.queue.append(track)
         caption = f"✅ Added to queue: {track.title}\n👤 Artist: {track.artist}\n📀 Album: {track.album}\n⏳ Duration: {track.duration}"
-        if track.thumbnail:
-            await message.reply_photo(track.thumbnail, caption=caption)
-        else:
-            await message.reply(caption)
+        try:
+            if track.thumbnail:
+                await message.reply_photo(track.thumbnail, caption=caption)
+            else:
+                await message.reply(caption)
+        except Exception as e:
+            await message.reply(f"❌ Error sending message: {str(e)}")
         if not self.current_track and not await self.is_in_vc():
             try:
-                await self.pytgcalls.join_group_call(self.chat_id, MediaStream(self.queue[0].path, MediaStream.Flags.AUDIO))
+                await self.pytgcalls.play(self.chat_id, MediaStream(self.queue[0].path, MediaStream.Flags.AUDIO))
                 caption = f"🎙️ Joined voice chat and started playback!\n🎵 Now playing: {self.queue[0].title}\n👤 Artist: {self.queue[0].artist}\n📀 Album: {self.queue[0].album}\n⏳ Duration: {self.queue[0].duration}"
                 if self.queue[0].thumbnail:
                     await self.bot.send_photo(self.chat_id, self.queue[0].thumbnail, caption=caption)
                 else:
                     await self.bot.send_message(self.chat_id, caption)
                 self.current_track = self.queue.pop(0)
-            except Exception:
-                await self.bot.send_message(self.chat_id, "❌ Error joining VC")
+            except Exception as e:
+                await self.bot.send_message(self.chat_id, f"❌ Error joining voice chat: {str(e)}")
         elif self.current_track:
             await message.reply(f"⏳ Queued, will play after: {self.current_track.title}")
 
@@ -162,8 +167,8 @@ class MusicBot:
             await self.pytgcalls.play(self.chat_id, None)
             await message.reply(f"⏭ Skipped: {self.current_track.title}")
             await self.play_next()
-        except Exception:
-            await message.reply("❌ Error skipping song")
+        except Exception as e:
+            await message.reply(f"❌ Error skipping song: {str(e)}")
 
     async def pause_song(self, _, message):
         self.chat_id = message.chat.id
@@ -173,8 +178,8 @@ class MusicBot:
         try:
             await self.pytgcalls.pause(self.chat_id)
             await message.reply(f"⏸ Paused: {self.current_track.title}")
-        except Exception:
-            await message.reply("❌ Error pausing song")
+        except Exception as e:
+            await message.reply(f"❌ Error pausing song: {str(e)}")
 
     async def resume_song(self, _, message):
         self.chat_id = message.chat.id
@@ -188,8 +193,8 @@ class MusicBot:
                 await message.reply(f"▶ Resumed: {self.current_track.title}")
             else:
                 await message.reply("❌ Song is not paused!")
-        except Exception:
-            await message.reply("❌ Error resuming song")
+        except Exception as e:
+            await message.reply(f"❌ Error resuming song: {str(e)}")
 
     async def queue_command(self, _, message):
         if not self.queue and not self.current_track:
@@ -209,8 +214,8 @@ class MusicBot:
             self.queue.clear()
             self.current_track = None
             await message.reply("🛑 Stopped and left voice chat!")
-        except Exception:
-            await message.reply("❌ Error stopping voice chat")
+        except Exception as e:
+            await message.reply(f"❌ Error stopping voice chat: {str(e)}")
 
     async def edit_or_reply(self, msg: Message, **kwargs):
         func = msg.edit_text if msg.from_user.is_self else msg.reply
@@ -322,7 +327,7 @@ class MusicBot:
             print(">>> MUSIC BOT STARTED")
             idle()
         except Exception as e:
-            print(f"Error during bot execution: {e}")
+            print(f"Error during bot execution: {str(e)}")
         finally:
             self.cleanup()
 
@@ -330,15 +335,15 @@ class MusicBot:
         try:
             self.pytgcalls.stop()
         except Exception as e:
-            print(f"Error stopping pytgcalls: {e}")
+            print(f"Error stopping pytgcalls: {str(e)}")
         try:
             self.bot.stop()
         except Exception as e:
-            print(f"Error stopping bot: {e}")
+            print(f"Error stopping bot: {str(e)}")
         try:
             self.userbot.stop()
         except Exception as e:
-            print(f"Error stopping userbot: {e}")
+            print(f"Error stopping userbot: {str(e)}")
         print(">>> MUSIC BOT STOPPED")
 
 bot = MusicBot()
