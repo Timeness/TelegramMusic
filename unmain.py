@@ -81,7 +81,7 @@ class MusicBot:
             return
         self.current_track = self.queue.pop(0)
         try:
-            await self.pytgcalls.play(self.chat_id, MediaStream(self.current_track.path, MediaStream.Flags.AUDIO))
+            await self.pytgcalls.play(self.chat_id, AudioPiped(self.current_track.path))
             caption = f"🎵 Now playing: {self.current_track.title}\n👤 Artist: {self.current_track.artist}\n📀 Album: {self.current_track.album}\n⏳ Duration: {self.current_track.duration}"
             if self.current_track.thumbnail:
                 await self.bot.send_photo(self.chat_id, self.current_track.thumbnail, caption=caption)
@@ -119,7 +119,7 @@ class MusicBot:
                 await self.play_next()
             return
         try:
-            await self.pytgcalls.play(self.chat_id, MediaStream(save_mp3_path, MediaStream.Flags.AUDIO))
+            await self.pytgcalls.play(self.chat_id, AudioPiped(save_mp3_path))
             await message.reply("🎙️ Joined voice chat and started playing Maybe.mp3!")
             self.current_track = track
         except Exception as e:
@@ -146,7 +146,7 @@ class MusicBot:
             await message.reply(f"❌ Error sending message: {str(e)}")
         if not self.current_track and not await self.is_in_vc():
             try:
-                await self.pytgcalls.play(self.chat_id, MediaStream(self.queue[0].path, MediaStream.Flags.AUDIO))
+                await self.pytgcalls.play(self.chat_id, AudioPiped(self.queue[0].path))
                 caption = f"🎙️ Joined voice chat and started playback!\n🎵 Now playing: {self.queue[0].title}\n👤 Artist: {self.queue[0].artist}\n📀 Album: {self.queue[0].album}\n⏳ Duration: {self.queue[0].duration}"
                 if self.queue[0].thumbnail:
                     await self.bot.send_photo(self.chat_id, self.queue[0].thumbnail, caption=caption)
