@@ -22,6 +22,9 @@ class Track:
     path: str
     title: str = ""
     thumbnail: str = ""
+    artist: str = ""
+    album: str = ""
+    duration: str = ""
 
 class MusicBot:
     def __init__(self):
@@ -58,6 +61,9 @@ class MusicBot:
             title = song.get("name", "Unknown Title")
             download_url = song.get("downloadUrl", [])[-1].get("link")
             thumbnail = song.get("image", [])[-1].get("link") if song.get("image") else ""
+            artist = song.get("primaryArtists", "Unknown Artist")
+            album = song.get("album", {}).get("name", "Unknown Album")
+            duration = song.get("duration", "Unknown")
             if not download_url:
                 return None
             file_path = f"downloads/{title}.mp3"
@@ -65,21 +71,24 @@ class MusicBot:
                 audio_response = requests.get(download_url)
                 audio_response.raise_for_status()
                 f.write(audio_response.content)
-            return Track(path=file_path, title=title, thumbnail=thumbnail)
+            return Track(path=file_path, title=title, thumbnail=thumbnail, artist=artist, album=album, duration=duration)
         except (requests.RequestException, KeyError, IndexError):
             return None
 
     async def play_next(self):
         if not self.queue:
             self.current_track = None
+            await self.pytgcalls.stop(self.chat_id)
+            await self.bot.send_message(self.chat_id, "Queue is empty, playback stopped.")
             return
         self.current_track = self.queue.pop(0)
         try:
             await self.pytgcalls.play(self.chat_id, AudioPiped(self.current_track.path))
+            caption = f"Now playing: {self.current_track.title}\nArtist: {self.current_track.artist}\nAlbum: {self.current_track.album}\nDuration: {self.current_track.duration}"
             if self.current_track.thumbnail:
-                await self.bot.send_photo(self.chat_id, self.current_track.thumbnail, caption=f"Now playing: {self.current_track.title}")
+                await self.bot.send_photo(self.chat_id, self.current_track.thumbnail, caption=caption)
             else:
-                await self.bot.send_message(self.chat_id, f"Now playing: {self.current_track.title or os.path.basename(self.current_track.path)}")
+                await self.bot.send_message(self.chat_id, caption)
         except Exception:
             await self.bot.send_message(self.chat_id, "Error playing track")
             await self.play_next()
@@ -96,7 +105,7 @@ class MusicBot:
         if not os.path.exists(save_mp3_path):
             await message.reply("Error: Maybe.mp3 not found!")
             return
-        track = Track(path=save_mp3_path, title="Maybe.mp3")
+        track = Track(path=save_mp3_path, title="Maybe.mp3", artist="Unknown", album="Unknown", duration="Unknown")
         if await self.is_in_vc():
             self.queue.append(track)
             await message.reply("Added Maybe.mp3 to queue!")
@@ -122,28 +131,36 @@ class MusicBot:
             await message.reply("No results found or error fetching song!")
             return
         self.queue.append(track)
+        caption = f"Added to queue: {track.title}\nArtist: {track.artist}\nAlbum: {track.album}\nDuration: {track.duration}"
         if track.thumbnail:
-            await message.reply_photo(track.thumbnail, caption=f"Added to queue: {track.title}")
+            await message.reply_photo(track.thumbnail, caption=caption)
         else:
-            await message.reply(f"Added to queue: {track.title}")
-        if not self.current_track:
-            await self.play_next()
-        if not await self.is_in_vc():
+            await message.reply(caption)
+        if not self.current_track and not await self.is_in_vc():
             try:
                 await self.pytgcalls.play(self.chat_id, AudioPiped(self.queue[0].path))
+                caption = f"Joined voice chat and started playback!\nNow playing: {self.queue[0].title}\nArtist: {self.queue[0].artist}\nAlbum: {self.queue[0].album}\nDuration: {self.queue[0].duration}"
                 if self.queue[0].thumbnail:
-                    await self.bot.send_photo(self.chat_id, self.queue[0].thumbnail, caption="Joined voice chat and started playback!")
+                    await self.bot.send_photo(self.chat_id, self.queue[0].thumbnail, caption=caption)
                 else:
-                    await self.bot.send_message(self.chat_id, "Joined voice chat and started playback!")
+                    await self.bot.send_message(self.chat_id, caption)
+                self.current_track = self.queue.pop(0)
             except Exception:
                 await self.bot.send_message(self.chat_id, "Error joining VC")
+        elif self.current_track:
+            await message.reply(f"Added to queue, will play after: {self.current_track.title}")
 
     async def skip_song(self, _, message):
-        if not self.current_track:
-            await message.reply("No song is playing!")
+        self.chat_id = message.chat.id
+        if not self.current_track or not await self.is_in_vc():
+            await message.reply("No song is playing or bot is not in voice chat!")
             return
-        await message.reply("Skipping current song...")
-        await self.play_next()
+        try:
+            await self.pytgcalls.stop(self.chat_id)
+            await message.reply(f"Skipped: {self.current_track.title}")
+            await self.play_next()
+        except Exception:
+            await message.reply("Error skipping song")
 
     async def stop_vc(self, _, message):
         self.chat_id = message.chat.id
