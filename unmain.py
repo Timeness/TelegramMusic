@@ -1,6 +1,6 @@
 from pyrogram import Client, filters, idle
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
-from pytgcalls import PyTgCalls
+from pytgcalls import PyTgCalls, idle as pyidle
 from pytgcalls.types import MediaStream as AudioPiped, Call, StreamEnded as StreamAudioEnded
 import os
 import requests
@@ -339,7 +339,7 @@ class MusicBot:
 
     def cleanup(self):
         try:
-            self.pytgcalls.stop()
+            pyidle()
         except Exception as e:
             print(f"Error stopping pytgcalls: {str(e)}")
         try:
