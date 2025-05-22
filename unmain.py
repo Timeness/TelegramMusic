@@ -226,12 +226,12 @@ class MusicBot:
         local_vars = {}
         exec(
             f"async def __aexec(client, message):\n" +
-            "".join(f"    {line}\n" for line in code.split("\n")) +
-            "    return locals().get('__ret__')",
+            "".join(f"    {line}\n" for line in code.split("\n")),
             globals(),
             local_vars
         )
-        return await local_vars["__aexec"](client, message)
+        result = await local_vars["__aexec"](client, message)
+        return result if result is not None else local_vars.get('__aexec').__code__.co_consts
 
     async def eval_command(self, client: Client, message: Message):
         if len(message.command) < 2:
@@ -243,18 +243,12 @@ class MusicBot:
         sys.stdout = StringIO()
         sys.stderr = StringIO()
         try:
-            result = await self.aexec(
-                "\n".join(
-                    f"    __ret__ = {line}" if not line.strip().startswith(("print", "await", "return"))
-                    else f"    {line}"
-                    for line in code.split("\n")
-                ),
-                client,
-                message
-            )
+            result = await self.aexec(code, client, message)
             output = sys.stdout.getvalue() or sys.stderr.getvalue()
-            if result is not None:
-                output = str(result) if not output else f"{output}\nResult: {result}"
+            if result and not output:
+                output = str(result)
+            elif result and output:
+                output = f"{output}\nResult: {result}"
             elif not output:
                 output = "✅ Success"
         except Exception:
